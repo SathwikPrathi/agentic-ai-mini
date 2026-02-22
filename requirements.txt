@@ -1,0 +1,12 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+httpx>=0.26
+pydantic>=2.6
+pydantic-settings>=2.2
+python-dotenv>=1.0
+cachetools>=5.3
+tenacity>=8.2
+
+# Multi-agent framework
+crewai>=1.9.3
+crewai-tools>=1.9.3
