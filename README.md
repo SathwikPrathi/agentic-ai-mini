@@ -1,142 +1,349 @@
-# Agentic AI Mini-Project (FastAPI + CrewAI)
 
-This project implements the assignment requirements with **two collaborating agents**:
+# Agentic AI Mini-Project (Python) — Two-Agent System
 
-- **Agent A (Planner):** converts a user’s natural-language request into a structured plan (small steps)
-- **Agent B (Executor):** executes those steps using tools (APIs) and returns structured results
-- Agent A then compiles the results into the final response
+This project implements a simple **multi-agent AI system** with **two agents** that collaborate to fulfill a user request end-to-end:
 
-The service is exposed via a small **FastAPI** server.
+- **Agent A (Planner / Router):** Understands the user’s natural-language query, decides whether tools are needed, and produces a structured plan.
+- **Agent B (Executor):** Executes the plan steps by calling the appropriate tools and returns results.
+- **Final Response (Synthesizer):** Produces a clean final answer for the user based on tool outputs (or answers directly if tools aren’t required).
 
-## Key Features
+The system is served via a **FastAPI** endpoint (`POST /query`) and supports both **tool-based tasks** (e.g., weather/time/calculation) and **general questions** (direct LLM answers).
 
-- ✅ 2-agent workflow (Planner ↔ Executor)
-- ✅ Tool-based execution (weather, Wikipedia summary, calculator, time zone)
-- ✅ Clean separation of concerns (API / service / agents / tools)
-- ✅ Basic production hygiene: retries, timeouts, caching, structured responses
-- ✅ Works with an LLM (CrewAI) **or** falls back to deterministic planning/execution if no API key is configured
+---
 
-## Architecture (High-level)
+## Features
 
-1. `POST /query` receives a natural language request
-2. **Agent A** produces a `Plan` (JSON)
-3. **Agent B** executes the plan with tools and returns an `ExecutionResult` (JSON)
-4. **Agent A** synthesizes a final answer for the user
+✅ Two-agent architecture (Planner + Executor)  
+✅ Programmatic inter-agent communication (structured plan + execution results)  
+✅ Tool routing (Agent decides whether to call tools or answer directly)  
+✅ Error resilience (tool failures are handled; user gets a clean answer)  
+✅ Modular Python code + clear API interface  
+✅ Multiple sample inputs/outputs provided below
 
-In CrewAI mode, Agent A and Agent B communicate via **task context** (the plan becomes context for the executor; the execution becomes context for the final response).
+---
 
-## Tools Implemented
+## Tech Stack
 
-- **Weather (Open-Meteo)** – current conditions for a city (no API key required)
-- **Wikipedia Summary** – quick topic summaries
-- **Calculator** – safe arithmetic evaluation (AST-based)
-- **Time in Timezone** – via worldtimeapi.org
-- **Summarize (rule-based)** – simple summarization for fallback mode
+- Python 3.10+ (recommended 3.11)
+- FastAPI + Uvicorn
+- OpenAI (LLM for planning + direct answering + final synthesis)
+- Tooling layer (weather / time / calculator / summarize)
 
-## Running Locally
+---
 
-### 1) Create and activate a virtual environment
+## Project Structure (High Level)
+
+```
+
+app/
+main.py                # FastAPI entrypoint
+service.py             # Orchestration: plan -> execute -> finalize
+agents/
+planner.py           # Agent A: produces plan
+executor.py          # Agent B: executes steps/tools
+prompts.py           # Prompts/instructions for agents
+deterministic_runner.py  # Optional deterministic execution
+tools/
+weather.py           # Weather tool (Open-Meteo)
+time.py              # Time tool (timezone-based)
+calculator.py        # Calculator tool
+summarize.py         # Simple summary tool
+
+````
+
+---
+
+## Setup & Installation
+
+### 1) Clone the repo
+```bash
+git clone <YOUR_REPO_URL>
+cd agentic-ai-mini
+````
+
+### 2) Create a virtual environment
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+# Windows PowerShell:
+.venv\Scripts\Activate.ps1
+# macOS/Linux:
+source .venv/bin/activate
 ```
 
-### 2) Install dependencies
+### 3) Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3) Configure environment variables
+---
 
-Copy the example env file:
+## Environment Variables
 
-```bash
-cp .env.example .env
-```
-
-If you want CrewAI + LLM planning, set:
-
-- `OPENAI_API_KEY=...`
-- `MODEL=openai/gpt-4o-mini` (or another supported model)
-
-> Note: CrewAI expects provider-prefixed model names (e.g., `openai/gpt-4o-mini`).
-
-### 4) Start the API
+Create a `.env` file (or export in your shell) with:
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+OPENAI_API_KEY="YOUR_KEY_HERE"
+# Optional (if your code supports selecting model):
+OPENAI_MODEL="openai/gpt-5.1-chat-latest"
 ```
 
-Open docs:
+> If `OPENAI_API_KEY` is missing, LLM-based planning/direct answers won’t work.
 
-- http://127.0.0.1:8000/docs
+---
 
-## Example Usage
-
-### Weather + summary
+## Run the Server
 
 ```bash
-curl -X POST http://127.0.0.1:8000/query \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"Get the current weather in New York and give me a short summary."}'
+uvicorn app.main:app --reload --port 8001
 ```
 
-Example response (shape):
+Open Swagger UI:
+
+* [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
+
+---
+
+## API Usage
+
+### Endpoint
+
+`POST /query`
+
+### Example request body
 
 ```json
 {
-  "trace_id": "...",
-  "final_answer": "It is currently ... in New York...",
-  "plan": {"user_intent": "...", "steps": [...]},
-  "steps": [{"step_id":"step_1","tool":"weather","input":{...},"output":{...}}],
+  "query": "Get the current weather in New York and summarize it."
+}
+```
+
+### Example response body (shape)
+
+```json
+{
+  "trace_id": "uuid-here",
+  "final_answer": "Human-friendly response here...",
+  "plan": {
+    "user_intent": "...",
+    "steps": [
+      { "id": "step1", "type": "WEATHER", "input": { "location": "..." } }
+    ],
+    "output_style": "concise"
+  },
+  "steps": [
+    {
+      "step_id": "step1",
+      "tool": "functions.weather",
+      "input": { "...": "..." },
+      "output": { "...": "..." }
+    }
+  ],
   "warnings": []
 }
 ```
 
-### Wikipedia summary
+**Notes**
 
-```bash
-curl -X POST http://127.0.0.1:8000/query \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"Tell me about FastAPI"}'
+* `trace_id` helps debug/log a single run.
+* `plan.steps` shows what Agent A planned.
+* `steps[]` shows what Agent B executed.
+* `final_answer` is what the user should read.
+* Tool failures (if any) are handled gracefully; the user still receives a clean final response.
+
+---
+
+## How the Agents Work
+
+### Agent A — Planner/Router
+
+Given a user query, Agent A decides:
+
+1. **DIRECT_ANSWER**: No tools needed → answer directly using LLM.
+2. **TOOL_PLAN**: Tools needed → generate a plan with step types and inputs.
+3. **CLARIFY**: Missing critical details → ask a single clarifying question.
+
+### Agent B — Executor
+
+Agent B reads the plan and executes each step using the appropriate tool:
+
+* Weather → weather API/tool
+* Time → timezone tool
+* Calculator → math evaluation tool
+* Summarize → summary tool
+
+### Final Synthesizer
+
+Combines tool outputs into a clean response. If a tool fails, the system can still produce a helpful answer.
+
+---
+
+## Examples (5)
+
+Below are five example inputs and what you can expect as output.
+(Exact values like temperature/time will vary because they depend on real-time APIs.)
+
+---
+
+### Example 1 — Weather + Summary (Tool Plan)
+
+**Input**
+
+```json
+{ "query": "Get the current weather in New York and give me a short summary." }
 ```
 
-### Calculator
+**Expected Output (example)**
 
-```bash
-curl -X POST http://127.0.0.1:8000/query \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"Calculate (2+3)*4"}'
+```json
+{
+  "trace_id": "....",
+  "final_answer": "In New York right now, it’s around 6°C with moderate winds. Overall, it feels cool—consider a light jacket if you're heading out.",
+  "plan": {
+    "user_intent": "Get current weather and summarize",
+    "steps": [
+      { "id": "step1", "type": "WEATHER", "input": { "location": "New York" }, "depends_on": [] },
+      { "id": "step2", "type": "SUMMARIZE", "input": { "from_step": "step1" }, "depends_on": ["step1"] }
+    ],
+    "output_style": "concise"
+  },
+  "steps": [
+    {
+      "step_id": "step1",
+      "tool": "functions.weather",
+      "input": { "location": "New York" },
+      "output": { "temperature_c": 6.2, "wind_kph": 18.0, "weather_code": 3 }
+    },
+    {
+      "step_id": "step2",
+      "tool": "functions.summarize",
+      "input": { "text": "..." },
+      "output": "Short summary text..."
+    }
+  ],
+  "warnings": []
+}
 ```
 
-## Project Structure
+---
 
-```text
-app/
-  main.py              # FastAPI entrypoint
-  schemas.py           # API request/response models
-  service.py           # Orchestration + mode selection (CrewAI vs fallback)
-  agents/
-    crew.py            # CrewAI two-agent pipeline
-    prompts.py         # Planner / Executor / Final instructions
-    models.py          # Pydantic schemas for plan + execution
-    rule_based.py      # Deterministic planner fallback
-    deterministic_runner.py  # Deterministic executor fallback
-  tools/
-    weather.py         # Open-Meteo tool
-    wiki.py            # Wikipedia summary tool
-    calculator.py      # Safe calculator tool
-    time.py            # Timezone tool
-    summarize.py       # Rule-based summarizer
-    http.py            # httpx client + retries
-tests/
+### Example 2 — Time in a Timezone (Tool Plan)
+
+**Input**
+
+```json
+{ "query": "What time is it in Asia/Kolkata right now?" }
 ```
 
-## Notes / Best Practices
+**Expected Output (example)**
 
-- **Timeouts + retries**: all external HTTP calls use `httpx` with retries
-- **Caching**: geocoding and weather calls are cached (TTL)
-- **Typed contracts**: Agent A and Agent B communicate via Pydantic models (`Plan`, `ExecutionResult`)
-- **Safe execution**: calculator uses AST parsing (no `eval`)
+```json
+{
+  "trace_id": "....",
+  "final_answer": "In Asia/Kolkata, it’s currently 2:15 PM (IST).",
+  "plan": {
+    "user_intent": "Get current time in Asia/Kolkata",
+    "steps": [
+      { "id": "step1", "type": "TIME_IN", "input": { "timezone": "Asia/Kolkata" }, "depends_on": [] }
+    ],
+    "output_style": "concise"
+  },
+  "steps": [
+    {
+      "step_id": "step1",
+      "tool": "functions.time_in",
+      "input": { "timezone": "Asia/Kolkata" },
+      "output": { "datetime": "2026-02-22T14:15:12+05:30", "timezone": "Asia/Kolkata" }
+    }
+  ],
+  "warnings": []
+}
+```
+
+---
+
+### Example 3 — Calculator (Tool Plan)
+
+**Input**
+
+```json
+{ "query": "Calculate (12 * 5) + 99." }
+```
+
+**Expected Output (example)**
+
+```json
+{
+  "trace_id": "....",
+  "final_answer": "(12 * 5) + 99 = 159",
+  "plan": {
+    "user_intent": "Compute a math expression",
+    "steps": [
+      { "id": "step1", "type": "CALCULATOR", "input": { "expression": "(12 * 5) + 99" }, "depends_on": [] }
+    ],
+    "output_style": "concise"
+  },
+  "steps": [
+    {
+      "step_id": "step1",
+      "tool": "functions.calculator",
+      "input": { "expression": "(12 * 5) + 99" },
+      "output": { "result": 159 }
+    }
+  ],
+  "warnings": []
+}
+```
+
+---
+
+### Example 4 — General Knowledge Question (Direct Answer, No Tools)
+
+**Input**
+
+```json
+{ "query": "Explain agentic AI in simple terms." }
+```
+
+**Expected Output (example)**
+
+```json
+{
+  "trace_id": "....",
+  "final_answer": "Agentic AI is when an AI system can plan and take steps to achieve a goal—like breaking a task into smaller actions, using tools when needed, and checking results—rather than only answering in one shot.",
+  "plan": {
+    "user_intent": "DIRECT_ANSWER",
+    "steps": [],
+    "output_style": "concise"
+  },
+  "steps": [],
+  "warnings": []
+}
+```
+
+---
+
+### Example 5 — Missing Details (Clarification)
+
+**Input**
+
+```json
+{ "query": "What's the weather like?" }
+```
+
+**Expected Output (example)**
+
+```json
+{
+  "trace_id": "....",
+  "final_answer": "Sure — which city should I check the weather for?",
+  "plan": {
+    "user_intent": "CLARIFY",
+    "steps": [],
+    "output_style": "concise"
+  },
+  "steps": [],
+  "warnings": []
+}
+```
