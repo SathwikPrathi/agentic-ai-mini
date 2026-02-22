@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any, Dict, Type
 
 from cachetools import TTLCache
-from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from app.core.exceptions import ToolExecutionError
-from app.tools.http import HttpConfig, build_async_client, get_json
+from app.tools.http import HttpConfig, build_sync_client, get_json_sync
+from app.tools.sync_base import SyncBaseTool
 
 
 class WikiInput(BaseModel):
@@ -15,7 +15,7 @@ class WikiInput(BaseModel):
     sentences: int = Field(default=5, ge=1, le=20, description="How many sentences to return")
 
 
-class WikipediaSummaryTool(BaseTool):
+class WikipediaSummaryTool(SyncBaseTool):
     name: str = "wikipedia_summary"
     description: str = "Fetch a short summary about a topic from Wikipedia's REST API."
     args_schema: Type[BaseModel] = WikiInput
@@ -23,11 +23,6 @@ class WikipediaSummaryTool(BaseTool):
     _cache: TTLCache = TTLCache(maxsize=512, ttl=60 * 60 * 24)  # 24h
 
     def _run(self, query: str, sentences: int = 5) -> Dict[str, Any]:
-        import asyncio
-
-        return asyncio.run(self._arun(query=query, sentences=sentences))
-
-    async def _arun(self, query: str, sentences: int = 5) -> Dict[str, Any]:
         key = f"{query.strip().lower()}::{sentences}"
         if key in self._cache:
             return self._cache[key]
@@ -36,8 +31,8 @@ class WikipediaSummaryTool(BaseTool):
             # First try the REST summary endpoint; it expects a page title.
             title = query.strip().replace(" ", "_")
             url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
-            async with build_async_client(HttpConfig()) as client:
-                payload = await get_json(client, url)
+            with build_sync_client(HttpConfig()) as client:
+                payload = get_json_sync(client, url)
 
             extract = payload.get("extract") or ""
             # Naive sentence trimming to keep dependency-free.

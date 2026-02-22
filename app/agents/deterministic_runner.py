@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 from typing import Any, Dict, List, Mapping
 
 from app.agents.models import ExecutionResult, ExecutedStep, Plan, StepType
@@ -60,9 +61,12 @@ async def run_plan(plan: Plan) -> ExecutionResult:
         step_input = _deep_replace_placeholders(step.input, outputs)
         try:
             # Prefer async if tool supports it.
-            if hasattr(tool, "_arun"):
-                out = await tool._arun(**step_input)  # type: ignore[attr-defined]
+            arun = getattr(tool, "_arun", None)
+            if arun is not None and inspect.iscoroutinefunction(arun):
+                out = await arun(**step_input)  # type: ignore[misc]
             else:
+                # Many tools in this repo intentionally implement a *sync* _arun
+                # (see SyncBaseTool). Never await a non-coroutine.
                 out = tool._run(**step_input)
             outputs[step.id] = out
             executed.append(ExecutedStep(step_id=step.id, tool=tool.name, input=step_input, output=out))
