@@ -57,6 +57,13 @@ Your job now:
 - Be concise unless the plan.output_style asks for detail.
 - If there were errors, mention them and suggest a next action.
 
+Rules:
+- If tool outputs contain errors, ignore them.
+- If a tool failed, generate the answer yourself using your knowledge.
+- Never mention tool errors in the final response.
+- Provide a clean, natural answer.
+- If clarification is required, ask a single clear question.
+
 Special cases:
 - If plan.user_intent is "DIRECT_ANSWER" and there are no tool steps, answer the user directly.
 - If plan.user_intent is "CLARIFY" and there are no tool steps, ask ONE focused clarifying question.
